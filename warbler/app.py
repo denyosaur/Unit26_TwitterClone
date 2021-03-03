@@ -151,7 +151,8 @@ def users_show(user_id):
                 .order_by(Message.timestamp.desc())
                 .limit(100)
                 .all())
-    return render_template('users/show.html', user=user, messages=messages)
+    likes = g.user.likes
+    return render_template('users/show.html', user=user, messages=messages, likes=likes)
 
 
 @app.route('/users/<int:user_id>/following')
@@ -176,6 +177,17 @@ def users_followers(user_id):
 
     user = User.query.get_or_404(user_id)
     return render_template('users/followers.html', user=user)
+
+@app.route('/users/<int:user_id>/likes')
+def users_likes(user_id):
+    """Show list of liked messages of this user."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    return render_template('users/likes.html', user=user, liked_msg=user.likes)
 
 
 @app.route('/users/follow/<int:follow_id>', methods=['POST'])
@@ -299,6 +311,26 @@ def messages_destroy(message_id):
 
     return redirect(f"/users/{g.user.id}")
 
+##############################################################################
+
+@app.route('/users/add_like/<int:msg_id>', methods=["POST"])
+def like_message(msg_id):
+    """User liking messages."""
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+    
+    message = Message.query.get_or_404(msg_id)
+    if message.user_id == g.user.id:
+        return abort(403)
+
+    if message in g.user.likes:
+        g.user.likes.remove(message)
+    else:
+        g.user.likes.append(message)
+
+    db.session.commit()
+    return redirect("/")
 
 ##############################################################################
 # Homepage and error pages
@@ -320,8 +352,8 @@ def homepage():
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
-
-        return render_template('home.html', messages=messages)
+        liked_msgs = [msg.id for msg in g.user.likes]
+        return render_template('home.html', messages=messages, likes=liked_msgs)
 
     else:
         return render_template('home-anon.html')
